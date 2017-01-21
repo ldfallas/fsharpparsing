@@ -21,6 +21,7 @@ type PExpr =
     | PSymbol of string
     | PString of string
     | PNumber of string
+    | PCall of string * (PExpr list)
     | BinaryOperation of Operator * PExpr * PExpr
 
 type PStat =
@@ -128,6 +129,27 @@ module Expressions =
            )
 
 
+   let optional (parser : (ReaderState ->  (('a * ReaderState) option ))) (defaultValue:'a) =
+       fun input -> match (parser input) with
+                    | result & Some _ -> result
+                    | _ -> (Some (defaultValue, input))
+
+   let digitP = readWithConditionOnChar  (fun c -> System.Char.IsDigit(c, 0))
+   let digitsP = (readZeroOrMoreChars (fun c ->  System.Char.IsDigit(c)))
+   let decimalPartP = (readSpecificChar '.' >>= (fun dot ->
+                       digitP  >>= (fun firstChar -> 
+                       digitsP >>= (fun digits  ->
+                        preturn (dot + firstChar + digits)))))
+                           
+    
+   let number =
+              ( (optional (readSpecificChar '-') "") >>= (fun neg -> 
+                digitP  >>= (fun firstChar -> 
+                (readZeroOrMoreChars (fun c ->  System.Char.IsDigit(c))) >>= (fun chars ->
+                (optional decimalPartP "") >>= (fun dec ->                                                                               
+                preturn (PNumber (neg + firstChar + chars + dec)))))))
+       
+
    let pkeyword name =
        concatParser2
           symbol
@@ -178,19 +200,6 @@ module Expressions =
    let dedent = indentation >>= (fun result -> if result = "DEDENT" then preturn result else pfail)
    let indented = indentation >>= (fun result -> if result = "INDENTED" then preturn result else pfail)
 
-   // let dedent =
-   //     (concatParser2
-   //        pGetInden tation
-   //        (fun indentation ->
-   //           (concatParser2
-   //              (readZeroOrMoreChars (fun c -> c = ' '))              
-   //              (fun spaces ->
-   //                 match (spaces.Length,
-   //                        List.skipWhile (fun x -> x <> spaces.Length) indentation) with
-   //                 | (identifiedIndentation, skipped & (_::_))
-   //                        when skipped <> indentation  ->
-   //                     (pSetIndentation identifiedIndentation) >> (preturn "DEDENT")
-   //                 | _ -> pfail))))
 
 
    let rec oneOrMore parser accumulated =
@@ -203,7 +212,7 @@ module Expressions =
        disjParser (oneOrMore parser accumulated) (preturn accumulated)
 
 
-   let pExpression = whitespace >> symbol
+   let pExpression = whitespace >> (disjParser symbol number)
 
 
    let buildExpressions (leftExpr:PExpr) (rightExprs:(Operator * PExpr) list) =
@@ -231,6 +240,12 @@ module Expressions =
 
    let pStatement =
        fun state -> (List.reduce disjParser !pStatements) state
+
+   let commaP = whitespace >> (readSpecificChar ',') 
+
+   let simpleSeq = pExpression >>= (fun first ->
+                   (zeroOrMore (commaP  >> pExpression) []) >>= (fun exprs ->
+                   preturn (first::exprs)))
 
 
 // (pStatement >>= (fun stat -> newline >> (preturn stat)))
