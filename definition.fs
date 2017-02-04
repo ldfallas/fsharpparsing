@@ -1,3 +1,4 @@
+
 namespace LD
 
 
@@ -16,13 +17,22 @@ type Operator =
     | Minus
     | Times
     | Div
+    | And
+    | Or
+    | Equal
+    | NotEqual
+    | Assign
+    
 
 type PExpr =
-    | PSymbol of string
-    | PString of string
-    | PNumber of string
-    | PCall of string * (PExpr list)
-    | BinaryOperation of Operator * PExpr * PExpr
+    | PSymbol  of string
+    | PString  of string
+    | PNumber  of string
+    | PBoolean of bool
+    | PNot     of PExpr
+    | PCall    of string * (PExpr list)
+    | PNested  of PExpr
+    | PBinaryOperation of Operator * PExpr * PExpr
 
 type PStat =
     | PIf of PExpr * (PStat list) * (PStat list)
@@ -36,23 +46,23 @@ module Expressions =
                         Position: int;
                         Indentation: int list}
 
-   let concatParser (parser1 : (ReaderState ->  (('a * ReaderState) option )))
-                    (parser2 : (ReaderState ->  (('b * ReaderState) option ))) =
+   let concatParsers (parser1 : (ReaderState ->  (('a * ReaderState) option )))
+                     (parser2 : (ReaderState ->  (('b * ReaderState) option ))) =
        fun input -> match (parser1 input) with
                     | Some (_, restState) -> parser2 restState
                     | _ -> None
 
-   let concatParser2 (parser1 : (ReaderState ->  (('a * ReaderState) option )))
+   let concatParsers2 (parser1 : (ReaderState ->  (('a * ReaderState) option )))
                      (parser2N : ('a ->  (ReaderState ->  (('b * ReaderState) option )))) =
        fun input -> match (parser1 input) with
                     | Some (matchedTxt, restState) -> (parser2N matchedTxt) restState
                     | _ -> None
 
    let inline (>>) (parser1 : (ReaderState ->  (('a * ReaderState) option )))
-                    (parser2 : (ReaderState ->  (('b * ReaderState) option ))) = concatParser parser1 parser2
+                    (parser2 : (ReaderState ->  (('b * ReaderState) option ))) = concatParsers parser1 parser2
 
    let inline (>>=) (parser1 : (ReaderState ->  (('a * ReaderState) option )))
-                    (parser2N : ('a ->  (ReaderState ->  (('b * ReaderState) option )))) = concatParser2 parser1 parser2N
+                    (parser2N : ('a ->  (ReaderState ->  (('b * ReaderState) option )))) = concatParsers2 parser1 parser2N
                     
    let disjParser (parser1 : (ReaderState ->  (('a * ReaderState) option )))
                   (parser2 : (ReaderState ->  (('a * ReaderState) option ))) =
@@ -116,20 +126,20 @@ module Expressions =
        
 
    let readLPar =
-       concatParser whitespace (readSpecificChar '(')
+       concatParsers whitespace (readSpecificChar '(')
    let readRPar = readSpecificChar ')'
 
    let symbol =
-       concatParser2
+       concatParsers2
           (readWithConditionOnChar  (fun c -> System.Char.IsLetter(c, 0)))
           (fun initialChar ->
-               concatParser2
+               concatParsers2
                   (readZeroOrMoreChars (fun c -> System.Char.IsLetter(c) || System.Char.IsDigit(c)))
                   (fun suffixString -> (preturn (PSymbol (initialChar + suffixString))))
            )
 
 
-   let optional (parser : (ReaderState ->  (('a * ReaderState) option ))) (defaultValue:'a) =
+   let optionalP (parser : (ReaderState ->  (('a * ReaderState) option ))) (defaultValue:'a) =
        fun input -> match (parser input) with
                     | result & Some _ -> result
                     | _ -> (Some (defaultValue, input))
@@ -143,15 +153,15 @@ module Expressions =
                            
     
    let number =
-              ( (optional (readSpecificChar '-') "") >>= (fun neg -> 
+              ( (optionalP (readSpecificChar '-') "") >>= (fun neg -> 
                 digitP  >>= (fun firstChar -> 
                 (readZeroOrMoreChars (fun c ->  System.Char.IsDigit(c))) >>= (fun chars ->
-                (optional decimalPartP "") >>= (fun dec ->                                                                               
+                (optionalP decimalPartP "") >>= (fun dec ->                                                                               
                 preturn (PNumber (neg + firstChar + chars + dec)))))))
        
 
    let pkeyword name =
-       concatParser2
+       concatParsers2
           symbol
           (fun result ->
               match result with
@@ -163,13 +173,13 @@ module Expressions =
    let returnKeyword = pkeyword "return"
    
    let colon  =
-       concatParser whitespaceNoNl (readSpecificChar ':')
+       concatParsers whitespaceNoNl (readSpecificChar ':')
        
    let newline  =
-       concatParser whitespaceNoNl (readSpecificChar '\n')
+       concatParsers whitespaceNoNl (readSpecificChar '\n')
 
    let identifyOperator operatorChar operatorResult =
-       concatParser
+       concatParsers
           whitespaceNoNl
           ((readSpecificChar operatorChar) >> (preturn operatorResult))
           
@@ -180,10 +190,10 @@ module Expressions =
        
 
    let indentation =
-       (concatParser2
+       (concatParsers2
           pGetIndentation
           (fun indentation ->
-             (concatParser2
+             (concatParsers2
                 (readZeroOrMoreChars (fun c -> c = ' '))              
                 (fun spaces ->
                    match (spaces.Length,
@@ -201,7 +211,6 @@ module Expressions =
    let indented = indentation >>= (fun result -> if result = "INDENTED" then preturn result else pfail)
 
 
-
    let rec oneOrMore parser accumulated =
        parser >>=
            (fun lastResult ->
@@ -212,11 +221,23 @@ module Expressions =
        disjParser (oneOrMore parser accumulated) (preturn accumulated)
 
 
-   let pExpression = whitespace >> (disjParser symbol number)
+//   let pExpression = whitespace >> (disjParser symbol number)
+
+   let pTopExpressions = ref []
+
+   let pExpression =
+       fun state -> (List.reduce disjParser !pTopExpressions) state
+       
+
+   let pNested = readLPar >>
+                   (pExpression >>=
+                       (fun expr -> readRPar >> (preturn (PNested expr))))
+
+   let pPrimaryExpression = whitespace >> (List.reduce disjParser [ symbol; number; pNested])
 
 
    let buildExpressions (leftExpr:PExpr) (rightExprs:(Operator * PExpr) list) =
-       (List.fold (fun left (op,right) -> BinaryOperation(op, left, right)) leftExpr rightExprs)
+       (List.fold (fun left (op,right) -> PBinaryOperation(op, left, right)) leftExpr rightExprs)
 
    let pBinaryExpression operators lowerLevelElementParser  =
        lowerLevelElementParser
@@ -228,9 +249,11 @@ module Expressions =
                      [])
                    >>= (fun acc -> preturn (buildExpressions leftTerm acc) ))
 
-   let pTerm = pBinaryExpression (disjParser pTimesOperator pDivOperator)  pExpression
+   let pTerm = pBinaryExpression (disjParser pTimesOperator pDivOperator)  pPrimaryExpression
          
    let pArithExpression = pBinaryExpression (disjParser plusOperator minusOperator)  pTerm
+
+   pTopExpressions := [pArithExpression]
 
    let pReturn  = returnKeyword >>
                   pExpression >>=
@@ -264,13 +287,13 @@ module Expressions =
 
 
    let testParser =
-       concatParser 
+       concatParsers 
           whitespace 
-          (concatParser 
+          (concatParsers 
               (readSpecificChar '(')
-              (concatParser 
+              (concatParsers 
                   whitespace
-                  (concatParser
+                  (concatParsers
                      (readSpecificChar ')') 
                      (preturn Nil)
                      )
@@ -279,13 +302,13 @@ module Expressions =
            )
 
    let testParser2 =
-       concatParser 
+       concatParsers 
           whitespace 
-          (concatParser 
+          (concatParsers 
               (readSpecificChar '(')
-              (concatParser 
+              (concatParsers 
                   whitespace
-                  (concatParser
+                  (concatParsers
                      (readSpecificChar ')') 
                      (preturn Nil)
                      )
