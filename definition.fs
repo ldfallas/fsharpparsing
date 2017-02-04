@@ -221,8 +221,6 @@ module Expressions =
        disjParser (oneOrMore parser accumulated) (preturn accumulated)
 
 
-//   let pExpression = whitespace >> (disjParser symbol number)
-
    let pTopExpressions = ref []
 
    let pExpression =
@@ -232,6 +230,25 @@ module Expressions =
    let pNested = readLPar >>
                    (pExpression >>=
                        (fun expr -> readRPar >> (preturn (PNested expr))))
+
+   let commaP = whitespace >> (readSpecificChar ',') 
+
+   let simpleSeq  =
+       disjParser (pExpression >>= (fun first ->
+                   (zeroOrMore (commaP  >> pExpression) []) >>= (fun exprs ->
+                   preturn (first::exprs)))) (preturn [])
+                  
+
+//   let commaSeparatedExpressions = simpleSeq pExpression commaP
+                   
+
+   let pCall =
+       whitespace >>
+       symbol >>= (fun (PSymbol funcName) ->
+       readLPar >>
+       simpleSeq >>= (fun args ->
+       readRPar >> (preturn (PCall(funcName, args)))))
+           
 
    let pPrimaryExpression = whitespace >> (List.reduce disjParser [ symbol; number; pNested])
 
@@ -249,7 +266,9 @@ module Expressions =
                      [])
                    >>= (fun acc -> preturn (buildExpressions leftTerm acc) ))
 
-   let pTerm = pBinaryExpression (disjParser pTimesOperator pDivOperator)  pPrimaryExpression
+   let pUnaryExpression = disjParser pCall pPrimaryExpression
+
+   let pTerm = pBinaryExpression (disjParser pTimesOperator pDivOperator)  pUnaryExpression
          
    let pArithExpression = pBinaryExpression (disjParser plusOperator minusOperator)  pTerm
 
@@ -264,11 +283,6 @@ module Expressions =
    let pStatement =
        fun state -> (List.reduce disjParser !pStatements) state
 
-   let commaP = whitespace >> (readSpecificChar ',') 
-
-   let simpleSeq = pExpression >>= (fun first ->
-                   (zeroOrMore (commaP  >> pExpression) []) >>= (fun exprs ->
-                   preturn (first::exprs)))
 
 
 // (pStatement >>= (fun stat -> newline >> (preturn stat)))

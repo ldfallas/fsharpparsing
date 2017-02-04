@@ -65,9 +65,20 @@ let testSimpleBinaryOperationWithNestedOperand () =
                 | Some (PBinaryOperation(
                            Plus,
                            (PSymbol "a"),
-                           (PBinaryOperation(Plus,(PSymbol "b"), (PSymbol "c"))) ), _ ) -> true
+                           (PNested(PBinaryOperation(Plus,(PSymbol "b"), (PSymbol "c"))) )
+                           ), _ ) -> true
                 | _             -> false) "Identified result"
     
+let testCallWithNestedExpressions () =
+    let testPrj = "foo(a + b, goo())"
+    let result = parse testPrj pArithExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PCall("foo",
+                              [ PBinaryOperation(Plus, (PSymbol "a"), (PSymbol "b"));
+                                PCall("goo",[])
+                              ]), _) -> true
+                | _             -> false) "Identified AST"
 
 
 let tests  = [
@@ -75,7 +86,8 @@ let tests  = [
     ("simpleIndentationBlock", testSimpleBlock);
     ("two nested blocks", testTwoNestedBlocks) ;
     ("parse a + b", testSimpleBinaryOperation) ;
-    ("parse a + (b+c)", testSimpleBinaryOperationWithNestedOperand)
+    ("parse a + (b+c)", testSimpleBinaryOperationWithNestedOperand);
+    ("parse: foo(a + b, goo())", testCallWithNestedExpressions)
     
     ]
 
@@ -87,4 +99,3 @@ let main args =
     0
 
 
- 
