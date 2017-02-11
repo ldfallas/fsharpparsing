@@ -186,7 +186,7 @@ module Expressions =
    let plusOperator = identifyOperator '+' Plus
    let minusOperator = identifyOperator '-' Minus
    let pTimesOperator = identifyOperator '*' Times
-   let pDivOperator = identifyOperator '*' Div
+   let pDivOperator = identifyOperator '/' Div
        
 
    let indentation =
@@ -268,7 +268,7 @@ module Expressions =
 
    let pUnaryExpression = disjParser pCall pPrimaryExpression
 
-   let pTerm = pBinaryExpression (disjParser pTimesOperator pDivOperator)  pUnaryExpression
+   let pTerm = pBinaryExpression (disjParser pDivOperator pTimesOperator)  pUnaryExpression
          
    let pArithExpression = pBinaryExpression (disjParser plusOperator minusOperator)  pTerm
 

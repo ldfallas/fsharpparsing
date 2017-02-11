@@ -9,7 +9,7 @@ let assertTrue condition description =
 
 let runTest name test =
     try
-        printfn "Running: %A "  name
+        printf "Running: %A "  name
         test()
         printfn "[SUCCEED]\n"
 
@@ -68,6 +68,25 @@ let testSimpleBinaryOperationWithNestedOperand () =
                            (PNested(PBinaryOperation(Plus,(PSymbol "b"), (PSymbol "c"))) )
                            ), _ ) -> true
                 | _             -> false) "Identified result"
+
+
+let testArithmeticOperationParsing () =
+    let testPrj = "x + y * b / 2"
+    let result = parse testPrj pArithExpression
+    assertTrue  (Option.isSome result) "Expression identified"
+    assertTrue (match result with
+                | Some (PBinaryOperation(
+                           Plus,
+                           (PSymbol "x"),
+                           (PBinaryOperation(
+                                Div,
+                                PBinaryOperation(
+                                    Times,
+                                    (PSymbol "y"),
+                                    (PSymbol "b")),
+                                (PNumber "2")))) , _) -> true
+                | _             -> false) "Identified result"
+    
     
 let testCallWithNestedExpressions () =
     let testPrj = "foo(a + b, goo())"
@@ -87,7 +106,8 @@ let tests  = [
     ("two nested blocks", testTwoNestedBlocks) ;
     ("parse a + b", testSimpleBinaryOperation) ;
     ("parse a + (b+c)", testSimpleBinaryOperationWithNestedOperand);
-    ("parse: foo(a + b, goo())", testCallWithNestedExpressions)
+    ("parse: foo(a + b, goo())", testCallWithNestedExpressions);
+    ("parse arithmetic operation", testArithmeticOperationParsing)
     
     ]
 
