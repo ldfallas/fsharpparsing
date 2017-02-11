@@ -22,6 +22,8 @@ type Operator =
     | Equal
     | NotEqual
     | Assign
+    | Lt
+    | Gt
     
 
 type PExpr =
@@ -182,11 +184,26 @@ module Expressions =
        concatParsers
           whitespaceNoNl
           ((readSpecificChar operatorChar) >> (preturn operatorResult))
+
+   let identifyOperator2 operatorChar1 operatorChar2 operatorResult =
+       concatParsers
+          whitespaceNoNl
+          ((readSpecificChar operatorChar1) >>
+           (readSpecificChar operatorChar2) >>
+           (preturn operatorResult))
+          
           
    let plusOperator = identifyOperator '+' Plus
    let minusOperator = identifyOperator '-' Minus
    let pTimesOperator = identifyOperator '*' Times
-   let pDivOperator = identifyOperator '/' Div
+   let pDivOperator = identifyOperator  '/' Div
+   let pGtOperator = identifyOperator  '>' Gt
+   let pLtOperator = identifyOperator  '<' Lt
+   let pEqualOperator = identifyOperator  '=' Equal      
+   let pAndOperator = identifyOperator2 '&' '&' And
+   let pNotEqualOperator = identifyOperator2 '<' '>' NotEqual   
+   let pOrOperator = identifyOperator2  '|' '|' Or
+   let pNotOperator = concatParsers whitespaceNoNl (readSpecificChar '!')   
        
 
    let indentation =
@@ -239,9 +256,6 @@ module Expressions =
                    preturn (first::exprs)))) (preturn [])
                   
 
-//   let commaSeparatedExpressions = simpleSeq pExpression commaP
-                   
-
    let pCall =
        whitespace >>
        symbol >>= (fun (PSymbol funcName) ->
@@ -266,13 +280,32 @@ module Expressions =
                      [])
                    >>= (fun acc -> preturn (buildExpressions leftTerm acc) ))
 
-   let pUnaryExpression = disjParser pCall pPrimaryExpression
+
+   let unaryExpressions = ref []
+
+   let pUnaryExpression =
+       fun state -> (List.reduce disjParser !unaryExpressions) state
+   let pNot = pNotOperator >>
+              pUnaryExpression >>= (fun expr ->
+              preturn (PNot expr))
+
+   unaryExpressions := [ pNot; pCall; pPrimaryExpression]
+   
 
    let pTerm = pBinaryExpression (disjParser pDivOperator pTimesOperator)  pUnaryExpression
          
    let pArithExpression = pBinaryExpression (disjParser plusOperator minusOperator)  pTerm
 
-   pTopExpressions := [pArithExpression]
+   let pRelationalExpression = pBinaryExpression (disjParser pGtOperator pLtOperator) pArithExpression
+
+   let pEqualityExpression = pBinaryExpression (disjParser pEqualOperator pNotEqualOperator) pRelationalExpression
+
+   let pLogicalOrExpression = pBinaryExpression pAndOperator pEqualityExpression
+
+   let pLogicalAndExpression = pBinaryExpression pOrOperator pLogicalOrExpression
+   
+
+   pTopExpressions := [pLogicalAndExpression]
 
    let pReturn  = returnKeyword >>
                   pExpression >>=
@@ -312,8 +345,9 @@ module Expressions =
                      (preturn Nil)
                      )
 
-                   ) 
+                   )
            )
+          
 
    let testParser2 =
        concatParsers 

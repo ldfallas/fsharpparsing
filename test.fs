@@ -100,6 +100,77 @@ let testCallWithNestedExpressions () =
                 | _             -> false) "Identified AST"
 
 
+let testAndBooleanExpression () =
+    let testCode = "a && b"
+    let result = parse testCode pExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PBinaryOperation(And,
+                                         (PSymbol "a"),
+                                         (PSymbol "b")), _) -> true
+                | _    -> false) "Identified AST for And"
+let testOrBooleanExpression () =
+    let testCode = "a || b"
+    let result = parse testCode pExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PBinaryOperation(Or,
+                                         (PSymbol "a"),
+                                         (PSymbol "b")), _) -> true
+                | _    -> false) "Identified AST for Or"
+        
+let testNotBooleanExpression () =
+    let testCode = "!a"
+    let result = parse testCode pExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PNot(PSymbol "a"), _) -> true
+                | _    -> false) "Identified AST for Not"
+
+
+let testSimpleEqualExpression () =
+    let testCode = "a = b"
+    let result = parse testCode pExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PBinaryOperation(Equal,
+                                         (PSymbol "a"),
+                                         (PSymbol "b")), _) -> true
+                | _    -> false) "Identified AST for Equal"
+
+let testSimpleNotEqualExpression () =
+    let testCode = "a <> b"
+    let result = parse testCode pExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PBinaryOperation(NotEqual,
+                                         (PSymbol "a"),
+                                         (PSymbol "b")), _) -> true
+                | _    -> false) "Identified AST for not equal"
+
+    
+let testSimpleLessThanExpression () =
+    let testCode = "a < b"
+    let result = parse testCode pExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PBinaryOperation(Lt,
+                                         (PSymbol "a"),
+                                         (PSymbol "b")), _) -> true
+                | _    -> false) "Identified AST for less than"
+
+let testSimpleGreaterThanExpression () =
+    let testCode = "a > b"
+    let result = parse testCode pExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PBinaryOperation(Gt,
+                                         (PSymbol "a"),
+                                         (PSymbol "b")), _) -> true
+                | _    -> false) "Identified AST for greater than"
+
+
+
 let tests  = [
     ("readChar", testReadChar);
     ("simpleIndentationBlock", testSimpleBlock);
@@ -107,7 +178,15 @@ let tests  = [
     ("parse a + b", testSimpleBinaryOperation) ;
     ("parse a + (b+c)", testSimpleBinaryOperationWithNestedOperand);
     ("parse: foo(a + b, goo())", testCallWithNestedExpressions);
-    ("parse arithmetic operation", testArithmeticOperationParsing)
+    ("parse arithmetic operation", testArithmeticOperationParsing);
+    ("parse basic and expression", testAndBooleanExpression);
+    ("parse basic or expression", testOrBooleanExpression);
+    ("parse basic not expression", testNotBooleanExpression);
+    ("parse basic equal expression", testSimpleEqualExpression);
+    ("parse basic not equal expression", testSimpleNotEqualExpression);
+    ("parse basic less than expression", testSimpleLessThanExpression);
+    ("parse basic greater than expression", testSimpleGreaterThanExpression)
+    
     
     ]
 
