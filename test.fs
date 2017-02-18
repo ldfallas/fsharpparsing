@@ -11,7 +11,7 @@ let runTest name test =
     try
         printf "Running: %A "  name
         test()
-        printfn "[SUCCEED]\n"
+        printfn "[SUCCEED]"
 
     with
         | e -> printfn "[FAILED: %A]" e.Message
@@ -169,6 +169,35 @@ let testSimpleGreaterThanExpression () =
                                          (PSymbol "b")), _) -> true
                 | _    -> false) "Identified AST for greater than"
 
+let testSimpleArrayAccess () =
+    let testCode = "a[1]"
+    let result = parse testCode pExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PArrayAccess((PSymbol "a"),
+                                     (PNumber "1")), _) -> true
+                | _    -> false) "Identified AST for simple array access"
+
+
+let testComposedAndExpressions1 () =
+    let testCode = "x > 1 && x < 10"
+    let result = parse testCode pExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PBinaryOperation(
+                          And, 
+                          PBinaryOperation(
+                            Gt,
+                            (PSymbol "x"),
+                            (PNumber "1")),
+                          PBinaryOperation(
+                            Lt,
+                            (PSymbol "x"),
+                            (PNumber "10")
+                         )), _) -> true
+                | _    -> false) "Identified AST for && of comparison expressions"
+     
+
 
 
 let tests  = [
@@ -185,7 +214,10 @@ let tests  = [
     ("parse basic equal expression", testSimpleEqualExpression);
     ("parse basic not equal expression", testSimpleNotEqualExpression);
     ("parse basic less than expression", testSimpleLessThanExpression);
-    ("parse basic greater than expression", testSimpleGreaterThanExpression)
+    ("parse basic greater than expression", testSimpleGreaterThanExpression);
+    ("parse simple array access", testSimpleArrayAccess);
+    ("parse simple and of comparison operations", testComposedAndExpressions1)
+    
     
     
     ]

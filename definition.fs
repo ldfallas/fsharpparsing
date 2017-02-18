@@ -34,6 +34,7 @@ type PExpr =
     | PNot     of PExpr
     | PCall    of string * (PExpr list)
     | PNested  of PExpr
+    | PArrayAccess of PExpr * PExpr
     | PBinaryOperation of Operator * PExpr * PExpr
 
 type PStat =
@@ -173,12 +174,22 @@ module Expressions =
 
    let ifKeyword = pkeyword "if"
    let returnKeyword = pkeyword "return"
+
+   let simpleCharWithoutWhitespace theCharacter =
+       concatParsers whitespaceNoNl (readSpecificChar theCharacter)
    
    let colon  =
-       concatParsers whitespaceNoNl (readSpecificChar ':')
+       simpleCharWithoutWhitespace ':'
        
    let newline  =
        concatParsers whitespaceNoNl (readSpecificChar '\n')
+
+   let pLSquareBracket  =
+       simpleCharWithoutWhitespace '['
+
+   let pRSquareBracket  =
+       simpleCharWithoutWhitespace ']'
+
 
    let identifyOperator operatorChar operatorResult =
        concatParsers
@@ -258,10 +269,13 @@ module Expressions =
 
    let pCall =
        whitespace >>
-       symbol >>= (fun (PSymbol funcName) ->
-       readLPar >>
-       simpleSeq >>= (fun args ->
-       readRPar >> (preturn (PCall(funcName, args)))))
+       symbol >>= (fun funcNameRef ->
+                   match funcNameRef with
+                   | (PSymbol funcName) ->
+                        readLPar >>
+                        simpleSeq >>= (fun args ->
+                        readRPar >> (preturn (PCall(funcName, args))))
+                   | _ -> pfail)
            
 
    let pPrimaryExpression = whitespace >> (List.reduce disjParser [ symbol; number; pNested])
@@ -289,8 +303,15 @@ module Expressions =
               pUnaryExpression >>= (fun expr ->
               preturn (PNot expr))
 
-   unaryExpressions := [ pNot; pCall; pPrimaryExpression]
-   
+   let pArrayAccess =
+       symbol >>= (fun symbol ->
+       pLSquareBracket >>
+       pExpression >>= (fun indexExpression ->
+       pRSquareBracket >>
+       (preturn (PArrayAccess(symbol, indexExpression)))))
+
+   unaryExpressions := [ pNot; pCall; pArrayAccess; pPrimaryExpression]
+
 
    let pTerm = pBinaryExpression (disjParser pDivOperator pTimesOperator)  pUnaryExpression
          
