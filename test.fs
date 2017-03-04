@@ -33,6 +33,17 @@ let testSimpleBlock () =
                 | Some (PIf (_, [PReturn _],[]) , _) -> true
                 | _             -> false) "Identified result"
 
+let testSimpleBlockWithCall () =
+    let testPrj = "if x
+   foo(1,2)
+   return a"
+    let result = parse testPrj ifParser
+    assertTrue  (Option.isSome result) "Block with call identified"
+    assertTrue (match result with
+                | Some (PIf (_, [PCallStat(PCall("foo",[_; _])); PReturn _],[]) , _) -> true
+                | _             -> false) "Identified result"
+    
+
 let testSimpleBlockWithEmptyLines () =
     let testPrj = "if x
 
@@ -235,6 +246,7 @@ let testComposedAndExpressions1 () =
 let tests  = [
     ("readChar", testReadChar);
     ("simpleIndentationBlock", testSimpleBlock);
+    ("simpleIndentationBlockWithCall", testSimpleBlockWithCall);
     ("testSimpleBlockWithEmptyLines", testSimpleBlockWithEmptyLines);
     ("testSimpleBlockWithEmptyLinesInThemiddle", testSimpleBlockWithEmptyLinesInTheMiddle);
     ("two nested blocks", testTwoNestedBlocks) ;

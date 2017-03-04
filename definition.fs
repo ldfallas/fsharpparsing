@@ -39,6 +39,7 @@ type PExpr =
 
 type PStat =
     | PIf of PExpr * (PStat list) * (PStat list)
+    | PCallStat of PExpr
     | PReturn of PExpr
 
 
@@ -338,6 +339,7 @@ module Expressions =
    let pReturn  = returnKeyword >>
                   pExpression >>=
                       (fun expr -> preturn (PReturn expr))
+   let pCallStatement = pCall >>= fun call -> (preturn (PCallStat call))
 
    let pStatements = ref []
 
@@ -416,7 +418,7 @@ module Expressions =
                    ) 
            )
 
-   pStatements := [pReturn; ifParser]
+   pStatements := [pReturn; ifParser; pCallStatement]
 
    let parse (input : string) (parser : (ReaderState ->  (('a * ReaderState) option ))) =
        parser {  Data = input ; Position = 0; Indentation = [0] }
