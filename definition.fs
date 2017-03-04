@@ -102,6 +102,22 @@ module Expressions =
                                   secondPosition - state.Position),
                  { state with Position = secondPosition })
 
+
+
+   let rec readingStringChar currentIndex (predicate:char -> char -> bool) (data : string) (previousChar : char) : int =
+       if data.Length > currentIndex && (predicate previousChar data.[currentIndex]) then
+           readingStringChar (currentIndex + 1) predicate data data.[currentIndex]
+       else
+           currentIndex
+           
+   let readZeroOrMoreStringChars (pred:char -> char -> bool) (state : ReaderState) : (string * ReaderState) option =
+       let
+         secondPosition = readingStringChar state.Position pred state.Data '\000'
+         in
+           Some ( state.Data.Substring(state.Position,
+                                  secondPosition - state.Position),
+                 { state with Position = secondPosition })
+
            
 
    let whitespace = readZeroOrMoreChars System.Char.IsWhiteSpace
@@ -132,7 +148,9 @@ module Expressions =
        concatParsers whitespace (readSpecificChar '(')
    let readRPar = readSpecificChar ')'
 
-   let symbol =
+
+
+   let pSymbol =
        concatParsers2
           (readWithConditionOnChar  (fun c -> System.Char.IsLetter(c, 0)))
           (fun initialChar ->
@@ -155,17 +173,26 @@ module Expressions =
                         preturn (dot + firstChar + digits)))))
                            
     
-   let number =
+   let pNumber =
               ( (optionalP (readSpecificChar '-') "") >>= (fun neg -> 
                 digitP  >>= (fun firstChar -> 
                 (readZeroOrMoreChars (fun c ->  System.Char.IsDigit(c))) >>= (fun chars ->
                 (optionalP decimalPartP "") >>= (fun dec ->                                                                               
                 preturn (PNumber (neg + firstChar + chars + dec)))))))
+
+
+   let pString =
+       whitespace >>
+       readSpecificChar '"' >>
+       readZeroOrMoreStringChars (fun previous current ->
+                 (previous = '\\' && current = '"') || current <> '"')
+       >>= (fun stringContents ->
+            readSpecificChar '"' >> (preturn (PString stringContents)))
        
 
    let pkeyword name =
        concatParsers2
-          symbol
+          pSymbol
           (fun result ->
               match result with
               | PSymbol symbolName
@@ -217,26 +244,6 @@ module Expressions =
    let pNotOperator = concatParsers whitespaceNoNl (readSpecificChar '!')   
        
 
-   let indentation =
-       (concatParsers2
-          pGetIndentation
-          (fun indentation ->
-             (concatParsers2
-                (readZeroOrMoreChars (fun c -> c = ' '))              
-                (fun spaces ->
-                   match (spaces.Length,
-                          indentation) with
-                   | (lessThan, top::_) when lessThan > top ->
-                       (pSetIndentation lessThan) >> (preturn "INDENT")
-                   | (lessThan, top::_) when lessThan = top ->
-                       preturn "INDENTED"
-                   | (identifiedIndentation, top::rest) ->
-                          (pSetFullIndentation rest) >> (preturn "DEDENT")
-                   | _ -> pfail))))
-
-   let indent = indentation >>= (fun result -> if result = "INDENT" then preturn result else pfail)
-   let dedent = indentation >>= (fun result -> if result = "DEDENT" then preturn result else pfail)
-   let indented = indentation >>= (fun result -> if result = "INDENTED" then preturn result else pfail)
 
 
    let rec oneOrMore parser accumulated =
@@ -255,11 +262,11 @@ module Expressions =
        fun state -> (List.reduce disjParser !pTopExpressions) state
        
 
-   let pNested = readLPar >>
-                   (pExpression >>=
-                       (fun expr -> readRPar >> (preturn (PNested expr))))
+   let pNested = readLPar    >>
+                 pExpression >>= (fun expr ->
+                 readRPar    >>  (preturn (PNested expr)))
 
-   let commaP = whitespace >> (readSpecificChar ',') 
+   let commaP = whitespace >> (readSpecificChar ',')
 
    let simpleSeq  =
        disjParser (pExpression >>= (fun first ->
@@ -269,7 +276,7 @@ module Expressions =
 
    let pCall =
        whitespace >>
-       symbol >>= (fun funcNameRef ->
+       pSymbol >>= (fun funcNameRef ->
                    match funcNameRef with
                    | (PSymbol funcName) ->
                         readLPar >>
@@ -278,7 +285,7 @@ module Expressions =
                    | _ -> pfail)
            
 
-   let pPrimaryExpression = whitespace >> (List.reduce disjParser [ symbol; number; pNested])
+   let pPrimaryExpression = whitespace >> (List.reduce disjParser [ pSymbol; pNumber; pString; pNested])
 
 
    let buildExpressions (leftExpr:PExpr) (rightExprs:(Operator * PExpr) list) =
@@ -304,7 +311,7 @@ module Expressions =
               preturn (PNot expr))
 
    let pArrayAccess =
-       symbol >>= (fun symbol ->
+       pSymbol >>= (fun symbol ->
        pLSquareBracket >>
        pExpression >>= (fun indexExpression ->
        pRSquareBracket >>
@@ -313,17 +320,17 @@ module Expressions =
    unaryExpressions := [ pNot; pCall; pArrayAccess; pPrimaryExpression]
 
 
-   let pTerm = pBinaryExpression (disjParser pDivOperator pTimesOperator)  pUnaryExpression
+   let pMultiplicativeExpression = pBinaryExpression (disjParser pDivOperator pTimesOperator)  pUnaryExpression
          
-   let pArithExpression = pBinaryExpression (disjParser plusOperator minusOperator)  pTerm
+   let pAdditiveExpression = pBinaryExpression (disjParser plusOperator minusOperator)  pMultiplicativeExpression
 
-   let pRelationalExpression = pBinaryExpression (disjParser pGtOperator pLtOperator) pArithExpression
+   let pRelationalExpression = pBinaryExpression (disjParser pGtOperator pLtOperator) pAdditiveExpression
 
    let pEqualityExpression = pBinaryExpression (disjParser pEqualOperator pNotEqualOperator) pRelationalExpression
 
-   let pLogicalOrExpression = pBinaryExpression pAndOperator pEqualityExpression
+   let pLogicalOrExpression = pBinaryExpression pOrOperator pEqualityExpression
 
-   let pLogicalAndExpression = pBinaryExpression pOrOperator pLogicalOrExpression
+   let pLogicalAndExpression = pBinaryExpression pAndOperator pLogicalOrExpression
    
 
    pTopExpressions := [pLogicalAndExpression]
@@ -338,19 +345,43 @@ module Expressions =
        fun state -> (List.reduce disjParser !pStatements) state
 
 
+   let emptyLine = newline
+
+   let indentation =
+       (concatParsers2
+          pGetIndentation
+          (fun indentation ->             
+             (concatParsers2
+                (readZeroOrMoreChars (fun c -> c = ' '))              
+                (fun spaces ->
+                   match (spaces.Length,
+                          indentation) with
+                   | (lessThan, top::_) when lessThan > top ->
+                       (pSetIndentation lessThan) >> (preturn "INDENT")
+                   | (lessThan, top::_) when lessThan = top ->
+                       preturn "INDENTED"
+                   | (identifiedIndentation, top::rest) ->
+                          (pSetFullIndentation rest) >> (preturn "DEDENT")
+                   | _ -> pfail))))
+
+   let indent = indentation >>= (fun result -> if result = "INDENT" then preturn result else pfail)
+   let dedent = indentation >>= (fun result -> if result = "DEDENT" then preturn result else pfail)
+   let indented = indentation >>= (fun result -> if result = "INDENTED" then preturn result else pfail)
+
+
 
 // (pStatement >>= (fun stat -> newline >> (preturn stat)))
    let pBlock = 
        indent >> (pStatement >>=
           (fun firstStat ->
-                ((zeroOrMore (newline >> indented >> pStatement) [])
+                ((zeroOrMore ((oneOrMore newline []) >> indented >> pStatement) [])
                  >>= (fun restStats -> dedent >> preturn (firstStat::restStats)))))
 
 
    let ifParser =
        ifKeyword  >>
        pExpression >>=
-          (fun expr -> newline >> pBlock >>= (fun block -> preturn (PIf(expr, block, []))))
+          (fun expr -> (oneOrMore newline []) >> pBlock >>= (fun block -> preturn (PIf(expr, block, []))))
              
 
 

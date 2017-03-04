@@ -33,6 +33,29 @@ let testSimpleBlock () =
                 | Some (PIf (_, [PReturn _],[]) , _) -> true
                 | _             -> false) "Identified result"
 
+let testSimpleBlockWithEmptyLines () =
+    let testPrj = "if x
+
+   
+   return a"
+    let result = parse testPrj ifParser
+    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue (match result with
+                | Some (PIf (_, [PReturn _],[]) , _) -> true
+                | _             -> false) "Identified result"
+
+
+let testSimpleBlockWithEmptyLinesInTheMiddle () =
+    let testPrj = "if x   
+   return a
+    
+   return a"
+    let result = parse testPrj ifParser
+    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue (match result with
+                | Some (PIf (_, [PReturn _; PReturn _],[]) , _) -> true
+                | _             -> false) "Identified result"
+
 
 
 let testTwoNestedBlocks () =
@@ -51,7 +74,7 @@ let testTwoNestedBlocks () =
 
 let testSimpleBinaryOperation () =
     let testPrj = "a + b"
-    let result = parse testPrj pArithExpression
+    let result = parse testPrj pExpression
     assertTrue  (Option.isSome result) "Plus identified"
     assertTrue (match result with
                 | Some (PBinaryOperation(Plus, (PSymbol "a"), (PSymbol "b")) , _) -> true
@@ -59,7 +82,7 @@ let testSimpleBinaryOperation () =
 
 let testSimpleBinaryOperationWithNestedOperand () =
     let testPrj = "a + (b+c)"
-    let result = parse testPrj pArithExpression
+    let result = parse testPrj pExpression
     assertTrue  (Option.isSome result) "Plus identified"
     assertTrue (match result with
                 | Some (PBinaryOperation(
@@ -72,7 +95,7 @@ let testSimpleBinaryOperationWithNestedOperand () =
 
 let testArithmeticOperationParsing () =
     let testPrj = "x + y * b / 2"
-    let result = parse testPrj pArithExpression
+    let result = parse testPrj pExpression
     assertTrue  (Option.isSome result) "Expression identified"
     assertTrue (match result with
                 | Some (PBinaryOperation(
@@ -90,7 +113,7 @@ let testArithmeticOperationParsing () =
     
 let testCallWithNestedExpressions () =
     let testPrj = "foo(a + b, goo())"
-    let result = parse testPrj pArithExpression
+    let result = parse testPrj pMultiplicativeExpression
     assertTrue  (Option.isSome result) "Parsed"
     assertTrue (match result with
                 | Some (PCall("foo",
@@ -178,6 +201,15 @@ let testSimpleArrayAccess () =
                                      (PNumber "1")), _) -> true
                 | _    -> false) "Identified AST for simple array access"
 
+let testStringParsing () =
+    let testCode = "\"hello\""
+    let result = parse testCode pExpression
+    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue (match result with
+                | Some (PString("hello"), _) -> true
+                | _    -> false) "Identified AST for simple array access"
+
+
 
 let testComposedAndExpressions1 () =
     let testCode = "x > 1 && x < 10"
@@ -203,6 +235,8 @@ let testComposedAndExpressions1 () =
 let tests  = [
     ("readChar", testReadChar);
     ("simpleIndentationBlock", testSimpleBlock);
+    ("testSimpleBlockWithEmptyLines", testSimpleBlockWithEmptyLines);
+    ("testSimpleBlockWithEmptyLinesInThemiddle", testSimpleBlockWithEmptyLinesInTheMiddle);
     ("two nested blocks", testTwoNestedBlocks) ;
     ("parse a + b", testSimpleBinaryOperation) ;
     ("parse a + (b+c)", testSimpleBinaryOperationWithNestedOperand);
@@ -216,7 +250,8 @@ let tests  = [
     ("parse basic less than expression", testSimpleLessThanExpression);
     ("parse basic greater than expression", testSimpleGreaterThanExpression);
     ("parse simple array access", testSimpleArrayAccess);
-    ("parse simple and of comparison operations", testComposedAndExpressions1)
+    ("parse simple and of comparison operations", testComposedAndExpressions1);
+        ("parse simple string parsing", testStringParsing)
     
     
     
