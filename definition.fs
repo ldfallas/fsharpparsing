@@ -40,6 +40,7 @@ type PExpr =
 type PStat =
     | PIf of PExpr * (PStat list) * (PStat list)
     | PCallStat of PExpr
+    | PAssignStat of PExpr * PExpr
     | PReturn of PExpr
 
 
@@ -231,7 +232,11 @@ module Expressions =
            (readSpecificChar operatorChar2) >>
            (preturn operatorResult))
           
-          
+   let pAssignOperator =
+       whitespaceNoNl >>
+       (readSpecificChar ':') >>
+       (readSpecificChar '=') 
+         
    let plusOperator = identifyOperator '+' Plus
    let minusOperator = identifyOperator '-' Minus
    let pTimesOperator = identifyOperator '*' Times
@@ -341,6 +346,13 @@ module Expressions =
                       (fun expr -> preturn (PReturn expr))
    let pCallStatement = pCall >>= fun call -> (preturn (PCallStat call))
 
+   let pAssignStatement =
+       pSymbol >>= (fun leftSide ->
+       pAssignOperator >>
+       pExpression >>= (fun rightSide ->
+       preturn (PAssignStat(leftSide, rightSide))))
+                                      
+
    let pStatements = ref []
 
    let pStatement =
@@ -418,7 +430,7 @@ module Expressions =
                    ) 
            )
 
-   pStatements := [pReturn; ifParser; pCallStatement]
+   pStatements := [pReturn; ifParser; pCallStatement; pAssignStatement]
 
    let parse (input : string) (parser : (ReaderState ->  (('a * ReaderState) option ))) =
        parser {  Data = input ; Position = 0; Indentation = [0] }

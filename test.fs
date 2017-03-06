@@ -33,6 +33,17 @@ let testSimpleBlock () =
                 | Some (PIf (_, [PReturn _],[]) , _) -> true
                 | _             -> false) "Identified result"
 
+let testSimpleBlockWithAssignment () =
+    let testPrj = "if x
+   a := x
+   return a"
+    let result = parse testPrj ifParser
+    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue (match result with
+                | Some (PIf (_, [PAssignStat(_,_); PReturn _],[]) , _) -> true
+                | _             -> false) "Identified result"
+
+
 let testSimpleBlockWithCall () =
     let testPrj = "if x
    foo(1,2)
@@ -81,6 +92,34 @@ let testTwoNestedBlocks () =
                              [PIf(_, [PReturn (PSymbol "z")],[]);
                               PReturn (PSymbol "a")],[]) , _) -> true
                 | _             -> false) "Identified result"
+
+
+
+
+
+let testNestedBlocks () =
+    let testPrj = "if x
+   x := 1
+   if u = 1
+      zoo()
+    
+      if k = 1
+         foo()
+         if z = 5
+            return 100
+   if y
+     return z
+   return a"
+    let result = parse testPrj ifParser
+    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue (match result with
+                | Some (PIf (_,
+                             [PAssignStat(_, _);
+                              PIf(_, _, _);
+                              PIf(_, [PReturn (PSymbol "z")],[]);
+                              PReturn (PSymbol "a")],[]) , _) -> true
+                | _             -> false) "Identified result"
+
 
 
 let testSimpleBinaryOperation () =
@@ -250,6 +289,7 @@ let tests  = [
     ("testSimpleBlockWithEmptyLines", testSimpleBlockWithEmptyLines);
     ("testSimpleBlockWithEmptyLinesInThemiddle", testSimpleBlockWithEmptyLinesInTheMiddle);
     ("two nested blocks", testTwoNestedBlocks) ;
+    ("several nested blocks", testNestedBlocks) ;
     ("parse a + b", testSimpleBinaryOperation) ;
     ("parse a + (b+c)", testSimpleBinaryOperationWithNestedOperand);
     ("parse: foo(a + b, goo())", testCallWithNestedExpressions);
@@ -263,6 +303,7 @@ let tests  = [
     ("parse basic greater than expression", testSimpleGreaterThanExpression);
     ("parse simple array access", testSimpleArrayAccess);
     ("parse simple and of comparison operations", testComposedAndExpressions1);
+    ("Parse assignment  statement", testSimpleBlockWithAssignment);
         ("parse simple string parsing", testStringParsing)
     
     
