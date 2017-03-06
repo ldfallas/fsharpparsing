@@ -1,17 +1,6 @@
 
-namespace LD
+namespace Experiment
 
-
-type SAtom =
-    | SSymbol of string
-    | SString of string
-    | SNumber of string
-
-
-type SList =
-    | SCons of SAtom * SList
-    | Nil
-    
 type Operator =
     | Plus
     | Minus
@@ -398,37 +387,6 @@ module Expressions =
           (fun expr -> (oneOrMore newline []) >> pBlock >>= (fun block -> preturn (PIf(expr, block, []))))
              
 
-
-   let testParser =
-       concatParsers 
-          whitespace 
-          (concatParsers 
-              (readSpecificChar '(')
-              (concatParsers 
-                  whitespace
-                  (concatParsers
-                     (readSpecificChar ')') 
-                     (preturn Nil)
-                     )
-
-                   )
-           )
-          
-
-   let testParser2 =
-       concatParsers 
-          whitespace 
-          (concatParsers 
-              (readSpecificChar '(')
-              (concatParsers 
-                  whitespace
-                  (concatParsers
-                     (readSpecificChar ')') 
-                     (preturn Nil)
-                     )
-
-                   ) 
-           )
 
    pStatements := [pReturn; ifParser; pCallStatement; pAssignStatement]
 
