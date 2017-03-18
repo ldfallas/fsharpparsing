@@ -43,6 +43,16 @@ let testSimpleBlockWithAssignment () =
                 | Some (PIf (_, [PAssignStat(_,_); PReturn _],None) , _) -> true
                 | _             -> false) "Identified result"
 
+let testWhileWithCall () =
+    let testPrj = "while x < 10:
+    print(x)
+    x := x + 1"
+    let result = parse testPrj whileParser
+    assertTrue  (Option.isSome result) "While block with call identified"
+    assertTrue (match result with
+                | Some (PWhile (_, [PCallStat(PCall("print",[ _]));  _]) , _) -> true
+                | _             -> false) "Identified result"
+
 
 let testSimpleBlockWithCall () =
     let testPrj = "if x:
@@ -123,6 +133,50 @@ let testNestedIfsWithElseScenario () =
           else:
              if m:
                return i
+      return a
+    "
+    let result = parse testPrj ifParser
+    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue (match result with
+                | Some (PIf (PSymbol "x",
+                             [PIf(PSymbol "y",
+                                  [PReturn (PSymbol "z")],
+                                  Some[PIf(PSymbol "z",
+                                           [PReturn (PSymbol "k")],
+                                           Some[PIf(PSymbol "j",
+                                                    [PReturn (PSymbol "y")],
+                                                    Some [PIf (PSymbol "m",
+                                                               [PReturn (PSymbol "i")],None)])])]);
+                              PReturn (PSymbol "a")],None), _) -> true                
+                | _             -> false) "Identified result"
+
+
+let testNestedIfsWithElseScenarioWithMixeEmptyLines () =
+    let testPrj = "if x:
+    
+      if y:
+
+    
+        return z
+    
+      else:
+    
+        if z:
+    
+          return k
+    
+        else:
+    
+          if j:
+    
+            return y
+    
+          else:
+    
+             if m:
+    
+               return i
+    
       return a
     "
     let result = parse testPrj ifParser
@@ -354,7 +408,9 @@ let tests  = [
     ("Parse assignment  statement", testSimpleBlockWithAssignment);
     ("parse simple string parsing", testStringParsing) ;
     ("Parse nested ifs with else", testTwoNestedIfsWithElse) ;
-    ("test nested ifs nightmare scenario", testNestedIfsWithElseScenario)
+    ("test nested ifs nightmare scenario", testNestedIfsWithElseScenario);
+    ("test nested ifs nightmare scenario with empty lines", testNestedIfsWithElseScenarioWithMixeEmptyLines) ;
+    ("test while with call", testWhileWithCall)
     
     ]
 

@@ -28,6 +28,7 @@ type PExpr =
 
 type PStat =
     | PIf of PExpr * (PStat list) * ((PStat list) option)
+    | PWhile of PExpr * (PStat list)
     | PCallStat of PExpr
     | PAssignStat of PExpr * PExpr
     | PReturn of PExpr
@@ -193,6 +194,7 @@ module Expressions =
               | _ -> pfail)
 
    let ifKeyword     = pkeyword "if"
+   let whileKeyword  = pkeyword "while"
    let returnKeyword = pkeyword "return"
    let elseKeyword   = pkeyword "else"
 
@@ -403,9 +405,18 @@ module Expressions =
                                   (match optElseBlockStats with
                                    | [] -> None
                                    | elements -> Some elements))))))
+
+   let whileParser =
+        whileKeyword    >>
+        pExpression     >>= (fun condition ->
+        colon           >>
+        pBlock          >>= (fun block ->
+        preturn (PWhile(condition, block))))
+        
+       
              
 
-   pStatements := [pReturn; ifParser; pCallStatement; pAssignStatement]
+   pStatements := [pReturn; ifParser; pCallStatement; pAssignStatement; whileParser]
 
    let parse (input : string) (parser : (ReaderState ->  (('a * ReaderState) option ))) =
        parser {  Data = input ; Position = 0; Indentation = [0] }
