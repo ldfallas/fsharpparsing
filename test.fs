@@ -25,89 +25,137 @@ let testReadChar () =
                 | _             -> false) "Identified result"
 
 let testSimpleBlock () =
-    let testPrj = "if x
+    let testPrj = "if x:
    return a"
     let result = parse testPrj ifParser
     assertTrue  (Option.isSome result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_, [PReturn _],[]) , _) -> true
+                | Some (PIf (_, [PReturn _], None) , _) -> true
                 | _             -> false) "Identified result"
 
 let testSimpleBlockWithAssignment () =
-    let testPrj = "if x
+    let testPrj = "if x:
    a := x
    return a"
     let result = parse testPrj ifParser
     assertTrue  (Option.isSome result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_, [PAssignStat(_,_); PReturn _],[]) , _) -> true
+                | Some (PIf (_, [PAssignStat(_,_); PReturn _],None) , _) -> true
                 | _             -> false) "Identified result"
 
 
 let testSimpleBlockWithCall () =
-    let testPrj = "if x
+    let testPrj = "if x:
    foo(1,2)
    return a"
     let result = parse testPrj ifParser
     assertTrue  (Option.isSome result) "Block with call identified"
     assertTrue (match result with
-                | Some (PIf (_, [PCallStat(PCall("foo",[_; _])); PReturn _],[]) , _) -> true
+                | Some (PIf (_, [PCallStat(PCall("foo",[_; _])); PReturn _], None) , _) -> true
                 | _             -> false) "Identified result"
     
 
 let testSimpleBlockWithEmptyLines () =
-    let testPrj = "if x
+    let testPrj = "if x:
 
    
    return a"
     let result = parse testPrj ifParser
     assertTrue  (Option.isSome result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_, [PReturn _],[]) , _) -> true
+                | Some (PIf (_, [PReturn _], None) , _) -> true
                 | _             -> false) "Identified result"
 
 
 let testSimpleBlockWithEmptyLinesInTheMiddle () =
-    let testPrj = "if x   
+    let testPrj = "if x:   
    return a
     
    return a"
     let result = parse testPrj ifParser
     assertTrue  (Option.isSome result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_, [PReturn _; PReturn _],[]) , _) -> true
+                | Some (PIf (_, [PReturn _; PReturn _], None) , _) -> true
                 | _             -> false) "Identified result"
 
 
 
 let testTwoNestedBlocks () =
-    let testPrj = "if x
-   if y
+    let testPrj = "if x:
+   if y:
      return z
    return a"
     let result = parse testPrj ifParser
     assertTrue  (Option.isSome result) "Block identified"
     assertTrue (match result with
                 | Some (PIf (_,
-                             [PIf(_, [PReturn (PSymbol "z")],[]);
-                              PReturn (PSymbol "a")],[]) , _) -> true
+                             [PIf(_, [PReturn (PSymbol "z")], None);
+                              PReturn (PSymbol "a")], None) , _) -> true
+                | _             -> false) "Identified result"
+
+
+let testTwoNestedIfsWithElse () =
+    let testPrj = "if x:
+      if y:
+        return z
+      else:
+        return k
+      return a"
+    let result = parse testPrj ifParser
+    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue (match result with
+                | Some (PIf (_,
+                             [PIf(_, [PReturn (PSymbol "z")],
+                                     Some([PReturn (PSymbol "k")]));
+                              PReturn (PSymbol "a")], None) , _) -> true
+                | _             -> false) "Identified result"
+
+let testNestedIfsWithElseScenario () =
+    let testPrj = "if x:
+      if y:
+        return z
+      else:
+        if z:
+          return k
+        else:
+          if j:
+            return y
+          else:
+             if m:
+               return i
+      return a
+    "
+    let result = parse testPrj ifParser
+    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue (match result with
+                | Some (PIf (PSymbol "x",
+                             [PIf(PSymbol "y",
+                                  [PReturn (PSymbol "z")],
+                                  Some[PIf(PSymbol "z",
+                                           [PReturn (PSymbol "k")],
+                                           Some[PIf(PSymbol "j",
+                                                    [PReturn (PSymbol "y")],
+                                                    Some [PIf (PSymbol "m",
+                                                               [PReturn (PSymbol "i")],None)])])]);
+                              PReturn (PSymbol "a")],None), _) -> true                
                 | _             -> false) "Identified result"
 
 
 
 
 
+
 let testNestedBlocks () =
-    let testPrj = "if x
+    let testPrj = "if x:
    x := 1
-   if u = 1
+   if u = 1:
       zoo()
     
-      if k = 1
+      if k = 1:
          foo()
-         if z = 5
+         if z = 5:
             return 100
-   if y
+   if y:
      return z
    return a"
     let result = parse testPrj ifParser
@@ -116,8 +164,8 @@ let testNestedBlocks () =
                 | Some (PIf (_,
                              [PAssignStat(_, _);
                               PIf(_, _, _);
-                              PIf(_, [PReturn (PSymbol "z")],[]);
-                              PReturn (PSymbol "a")],[]) , _) -> true
+                              PIf(_, [PReturn (PSymbol "z")], None);
+                              PReturn (PSymbol "a")], None) , _) -> true
                 | _             -> false) "Identified result"
 
 
@@ -304,9 +352,9 @@ let tests  = [
     ("parse simple array access", testSimpleArrayAccess);
     ("parse simple and of comparison operations", testComposedAndExpressions1);
     ("Parse assignment  statement", testSimpleBlockWithAssignment);
-        ("parse simple string parsing", testStringParsing)
-    
-    
+    ("parse simple string parsing", testStringParsing) ;
+    ("Parse nested ifs with else", testTwoNestedIfsWithElse) ;
+    ("test nested ifs nightmare scenario", testNestedIfsWithElseScenario)
     
     ]
 

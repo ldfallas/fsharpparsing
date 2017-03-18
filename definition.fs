@@ -27,7 +27,7 @@ type PExpr =
     | PBinaryOperation of Operator * PExpr * PExpr
 
 type PStat =
-    | PIf of PExpr * (PStat list) * (PStat list)
+    | PIf of PExpr * (PStat list) * ((PStat list) option)
     | PCallStat of PExpr
     | PAssignStat of PExpr * PExpr
     | PReturn of PExpr
@@ -76,7 +76,9 @@ module Expressions =
              { state with Indentation = newIndentation } )
 
 
-   let pfail (state : ReaderState) = None
+   let pfail (state : ReaderState) =
+       //System.Console.Out.WriteLine("Failing at: " + state.Position.ToString()-)
+       None
 
 
    let rec readingChar currentIndex (predicate:char -> bool) (data : string) : int =
@@ -190,8 +192,9 @@ module Expressions =
                   when symbolName = name -> preturn result
               | _ -> pfail)
 
-   let ifKeyword = pkeyword "if"
+   let ifKeyword     = pkeyword "if"
    let returnKeyword = pkeyword "return"
+   let elseKeyword   = pkeyword "else"
 
    let simpleCharWithoutWhitespace theCharacter =
        concatParsers whitespaceNoNl (readSpecificChar theCharacter)
@@ -351,11 +354,9 @@ module Expressions =
    let emptyLine = newline
 
    let indentation =
-       (concatParsers2
-          pGetIndentation
-          (fun indentation ->             
-             (concatParsers2
-                (readZeroOrMoreChars (fun c -> c = ' '))              
+          pGetIndentation >>=(fun indentation ->                          
+                (readZeroOrMoreChars (fun c -> c = ' '))
+                >>=
                 (fun spaces ->
                    match (spaces.Length,
                           indentation) with
@@ -365,28 +366,44 @@ module Expressions =
                        preturn "INDENTED"
                    | (identifiedIndentation, top::rest) ->
                           (pSetFullIndentation rest) >> (preturn "DEDENT")
-                   | _ -> pfail))))
+                   | _ -> pfail))
 
    let indent = indentation >>= (fun result -> if result = "INDENT" then preturn result else pfail)
    let dedent = indentation >>= (fun result -> if result = "DEDENT" then preturn result else pfail)
    let indented = indentation >>= (fun result -> if result = "INDENTED" then preturn result else pfail)
 
+   let newlines = oneOrMore newline []
+   
+   let pBlock =
+       newlines   >>
+       indent     >>
+       pStatement >>= (fun firstStat ->
+       (zeroOrMore
+           (newlines  >>
+            indented  >>
+            pStatement) [])  >>= (fun restStats ->
+       dedent      >> preturn (firstStat::restStats)))
 
-
-// (pStatement >>= (fun stat -> newline >> (preturn stat)))
-   let pBlock = 
-       indent >> (pStatement >>=
-          (fun firstStat ->
-                ((zeroOrMore ((oneOrMore newline []) >> indented >> pStatement) [])
-                 >>= (fun restStats -> dedent >> preturn (firstStat::restStats)))))
+   let pElse =
+       newlines >>
+       indented    >> 
+       elseKeyword >>
+       colon       >>
+       pBlock
 
 
    let ifParser =
-       ifKeyword  >>
-       pExpression >>=
-          (fun expr -> (oneOrMore newline []) >> pBlock >>= (fun block -> preturn (PIf(expr, block, []))))
+       ifKeyword   >>
+       pExpression >>= (fun expr ->
+       colon       >>
+       pBlock      >>= (fun block ->
+       (optionalP pElse []) >>= (fun optElseBlockStats ->
+                     preturn (PIf(expr,
+                                  block,
+                                  (match optElseBlockStats with
+                                   | [] -> None
+                                   | elements -> Some elements))))))
              
-
 
    pStatements := [pReturn; ifParser; pCallStatement; pAssignStatement]
 
