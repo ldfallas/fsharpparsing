@@ -6,6 +6,15 @@ let assertTrue condition description =
         raise (System.Exception("Failed condition: " + description))
     else
         ()
+        
+let assertFalse condition description =
+    assertTrue (not condition) description
+
+let isSuccess parsingResult =
+    match parsingResult with
+        | Success _ -> true
+        | _         -> false
+    
 
 let runTest name test =
     try
@@ -19,18 +28,18 @@ let runTest name test =
 
 let testReadChar () =
     let result = parse "hello" readChar
-    assertTrue  (Option.isSome result) "Char read"
+    assertTrue  (isSuccess result) "Char read"
     assertTrue (match result with
-                | Some ("h", _) -> true
+                | Success ("h", _) -> true
                 | _             -> false) "Identified result"
 
 let testSimpleBlock () =
     let testPrj = "if x:
    return a"
     let result = parse testPrj ifParser
-    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue  (isSuccess result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_, [PReturn _], None) , _) -> true
+                | Success (PIf (_, [PReturn _], None) , _) -> true
                 | _             -> false) "Identified result"
 
 let testSimpleBlockWithAssignment () =
@@ -38,9 +47,9 @@ let testSimpleBlockWithAssignment () =
    a := x
    return a"
     let result = parse testPrj ifParser
-    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue  (isSuccess result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_, [PAssignStat(_,_); PReturn _],None) , _) -> true
+                | Success (PIf (_, [PAssignStat(_,_); PReturn _],None) , _) -> true
                 | _             -> false) "Identified result"
 
 let testWhileWithCall () =
@@ -48,9 +57,9 @@ let testWhileWithCall () =
     print(x)
     x := x + 1"
     let result = parse testPrj whileParser
-    assertTrue  (Option.isSome result) "While block with call identified"
+    assertTrue  (isSuccess result) "While block with call identified"
     assertTrue (match result with
-                | Some (PWhile (_, [PCallStat(PCall("print",[ _]));  _]) , _) -> true
+                | Success (PWhile (_, [PCallStat(PCall("print",[ _]));  _]) , _) -> true
                 | _             -> false) "Identified result"
 
 
@@ -59,9 +68,9 @@ let testSimpleBlockWithCall () =
    foo(1,2)
    return a"
     let result = parse testPrj ifParser
-    assertTrue  (Option.isSome result) "Block with call identified"
+    assertTrue  (isSuccess result) "Block with call identified"
     assertTrue (match result with
-                | Some (PIf (_, [PCallStat(PCall("foo",[_; _])); PReturn _], None) , _) -> true
+                | Success (PIf (_, [PCallStat(PCall("foo",[_; _])); PReturn _], None) , _) -> true
                 | _             -> false) "Identified result"
     
 
@@ -71,9 +80,9 @@ let testSimpleBlockWithEmptyLines () =
    
    return a"
     let result = parse testPrj ifParser
-    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue  (isSuccess result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_, [PReturn _], None) , _) -> true
+                | Success (PIf (_, [PReturn _], None) , _) -> true
                 | _             -> false) "Identified result"
 
 
@@ -83,9 +92,9 @@ let testSimpleBlockWithEmptyLinesInTheMiddle () =
     
    return a"
     let result = parse testPrj ifParser
-    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue  (isSuccess result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_, [PReturn _; PReturn _], None) , _) -> true
+                | Success (PIf (_, [PReturn _; PReturn _], None) , _) -> true
                 | _             -> false) "Identified result"
 
 
@@ -96,11 +105,22 @@ let testTwoNestedBlocks () =
      return z
    return a"
     let result = parse testPrj ifParser
-    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue  (isSuccess result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_,
+                | Success (PIf (_,
                              [PIf(_, [PReturn (PSymbol "z")], None);
                               PReturn (PSymbol "a")], None) , _) -> true
+                | _             -> false) "Identified result"
+
+let testTwoNestedBlocksWithSyntaxError () =
+    let testPrj = "if x:
+   if !@# y:
+     return z
+   return a"
+    let result = parse testPrj ifParser
+    assertFalse  (isSuccess result) "Block not  identified"
+    assertTrue (match result with
+                | Failure(Fatal(msg, 2)) -> true
                 | _             -> false) "Identified result"
 
 
@@ -112,11 +132,11 @@ let testTwoNestedIfsWithElse () =
         return k
       return a"
     let result = parse testPrj ifParser
-    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue  (isSuccess result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_,
+                | Success (PIf (_,
                              [PIf(_, [PReturn (PSymbol "z")],
-                                     Some([PReturn (PSymbol "k")]));
+                                      Some([PReturn (PSymbol "k")]));
                               PReturn (PSymbol "a")], None) , _) -> true
                 | _             -> false) "Identified result"
 
@@ -136,16 +156,16 @@ let testNestedIfsWithElseScenario () =
       return a
     "
     let result = parse testPrj ifParser
-    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue  (isSuccess result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (PSymbol "x",
+                | Success (PIf (PSymbol "x",
                              [PIf(PSymbol "y",
                                   [PReturn (PSymbol "z")],
-                                  Some[PIf(PSymbol "z",
+                                   Some[PIf(PSymbol "z",
                                            [PReturn (PSymbol "k")],
-                                           Some[PIf(PSymbol "j",
+                                            Some[PIf(PSymbol "j",
                                                     [PReturn (PSymbol "y")],
-                                                    Some [PIf (PSymbol "m",
+                                                     Some [PIf (PSymbol "m",
                                                                [PReturn (PSymbol "i")],None)])])]);
                               PReturn (PSymbol "a")],None), _) -> true                
                 | _             -> false) "Identified result"
@@ -180,16 +200,16 @@ let testNestedIfsWithElseScenarioWithMixeEmptyLines () =
       return a
     "
     let result = parse testPrj ifParser
-    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue  (isSuccess result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (PSymbol "x",
+                | Success (PIf (PSymbol "x",
                              [PIf(PSymbol "y",
                                   [PReturn (PSymbol "z")],
-                                  Some[PIf(PSymbol "z",
+                                   Some[PIf(PSymbol "z",
                                            [PReturn (PSymbol "k")],
-                                           Some[PIf(PSymbol "j",
+                                            Some[PIf(PSymbol "j",
                                                     [PReturn (PSymbol "y")],
-                                                    Some [PIf (PSymbol "m",
+                                                     Some [PIf (PSymbol "m",
                                                                [PReturn (PSymbol "i")],None)])])]);
                               PReturn (PSymbol "a")],None), _) -> true                
                 | _             -> false) "Identified result"
@@ -213,9 +233,9 @@ let testNestedBlocks () =
      return z
    return a"
     let result = parse testPrj ifParser
-    assertTrue  (Option.isSome result) "Block identified"
+    assertTrue  (isSuccess result) "Block identified"
     assertTrue (match result with
-                | Some (PIf (_,
+                | Success (PIf (_,
                              [PAssignStat(_, _);
                               PIf(_, _, _);
                               PIf(_, [PReturn (PSymbol "z")], None);
@@ -227,33 +247,33 @@ let testNestedBlocks () =
 let testSimpleBinaryOperation () =
     let testPrj = "a + b"
     let result = parse testPrj pExpression
-    assertTrue  (Option.isSome result) "Plus identified"
+    assertTrue  (isSuccess result) "Plus identified"
     assertTrue (match result with
-                | Some (PBinaryOperation(Plus, (PSymbol "a"), (PSymbol "b")) , _) -> true
+                | Success (PBinaryOperation(Plus, (PSymbol "a"), (PSymbol "b")) , _) -> true
                 | _             -> false) "Identified result"
 
 let testSimpleBinaryOperationWithNestedOperand () =
     let testPrj = "a + (b+c)"
     let result = parse testPrj pExpression
-    assertTrue  (Option.isSome result) "Plus identified"
+    assertTrue  (isSuccess result) "Plus identified"
     assertTrue (match result with
-                | Some (PBinaryOperation(
-                           Plus,
-                           (PSymbol "a"),
-                           (PNested(PBinaryOperation(Plus,(PSymbol "b"), (PSymbol "c"))) )
-                           ), _ ) -> true
+                | Success (PBinaryOperation(
+                            Plus,
+                            (PSymbol "a"),
+                            (PNested(PBinaryOperation(Plus,(PSymbol "b"), (PSymbol "c"))) )
+                            ), _ ) -> true
                 | _             -> false) "Identified result"
 
 
 let testArithmeticOperationParsing () =
     let testPrj = "x + y * b / 2"
     let result = parse testPrj pExpression
-    assertTrue  (Option.isSome result) "Expression identified"
+    assertTrue  (isSuccess result) "Expression identified"
     assertTrue (match result with
-                | Some (PBinaryOperation(
-                           Plus,
-                           (PSymbol "x"),
-                           (PBinaryOperation(
+                | Success (PBinaryOperation(
+                            Plus,
+                            (PSymbol "x"),
+                            (PBinaryOperation(
                                 Div,
                                 PBinaryOperation(
                                     Times,
@@ -266,9 +286,9 @@ let testArithmeticOperationParsing () =
 let testCallWithNestedExpressions () =
     let testPrj = "foo(a + b, goo())"
     let result = parse testPrj pMultiplicativeExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PCall("foo",
+                | Success (PCall("foo",
                               [ PBinaryOperation(Plus, (PSymbol "a"), (PSymbol "b"));
                                 PCall("goo",[])
                               ]), _) -> true
@@ -278,18 +298,18 @@ let testCallWithNestedExpressions () =
 let testAndBooleanExpression () =
     let testCode = "a && b"
     let result = parse testCode pExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PBinaryOperation(And,
+                | Success (PBinaryOperation(And,
                                          (PSymbol "a"),
                                          (PSymbol "b")), _) -> true
                 | _    -> false) "Identified AST for And"
 let testOrBooleanExpression () =
     let testCode = "a || b"
     let result = parse testCode pExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PBinaryOperation(Or,
+                | Success (PBinaryOperation(Or,
                                          (PSymbol "a"),
                                          (PSymbol "b")), _) -> true
                 | _    -> false) "Identified AST for Or"
@@ -297,18 +317,18 @@ let testOrBooleanExpression () =
 let testNotBooleanExpression () =
     let testCode = "!a"
     let result = parse testCode pExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PNot(PSymbol "a"), _) -> true
+                | Success (PNot(PSymbol "a"), _) -> true
                 | _    -> false) "Identified AST for Not"
 
 
 let testSimpleEqualExpression () =
     let testCode = "a = b"
     let result = parse testCode pExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PBinaryOperation(Equal,
+                | Success (PBinaryOperation(Equal,
                                          (PSymbol "a"),
                                          (PSymbol "b")), _) -> true
                 | _    -> false) "Identified AST for Equal"
@@ -316,9 +336,9 @@ let testSimpleEqualExpression () =
 let testSimpleNotEqualExpression () =
     let testCode = "a <> b"
     let result = parse testCode pExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PBinaryOperation(NotEqual,
+                | Success (PBinaryOperation(NotEqual,
                                          (PSymbol "a"),
                                          (PSymbol "b")), _) -> true
                 | _    -> false) "Identified AST for not equal"
@@ -327,9 +347,9 @@ let testSimpleNotEqualExpression () =
 let testSimpleLessThanExpression () =
     let testCode = "a < b"
     let result = parse testCode pExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PBinaryOperation(Lt,
+                | Success (PBinaryOperation(Lt,
                                          (PSymbol "a"),
                                          (PSymbol "b")), _) -> true
                 | _    -> false) "Identified AST for less than"
@@ -337,9 +357,9 @@ let testSimpleLessThanExpression () =
 let testSimpleGreaterThanExpression () =
     let testCode = "a > b"
     let result = parse testCode pExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PBinaryOperation(Gt,
+                | Success (PBinaryOperation(Gt,
                                          (PSymbol "a"),
                                          (PSymbol "b")), _) -> true
                 | _    -> false) "Identified AST for greater than"
@@ -347,18 +367,18 @@ let testSimpleGreaterThanExpression () =
 let testSimpleArrayAccess () =
     let testCode = "a[1]"
     let result = parse testCode pExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PArrayAccess((PSymbol "a"),
+                | Success (PArrayAccess((PSymbol "a"),
                                      (PNumber "1")), _) -> true
                 | _    -> false) "Identified AST for simple array access"
 
 let testStringParsing () =
     let testCode = "\"hello\""
     let result = parse testCode pExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PString("hello"), _) -> true
+                | Success (PString("hello"), _) -> true
                 | _    -> false) "Identified AST for simple array access"
 
 
@@ -366,18 +386,18 @@ let testStringParsing () =
 let testComposedAndExpressions1 () =
     let testCode = "x > 1 && x < 10"
     let result = parse testCode pExpression
-    assertTrue  (Option.isSome result) "Parsed"
+    assertTrue  (isSuccess result) "Parsed"
     assertTrue (match result with
-                | Some (PBinaryOperation(
-                          And, 
-                          PBinaryOperation(
-                            Gt,
-                            (PSymbol "x"),
-                            (PNumber "1")),
-                          PBinaryOperation(
-                            Lt,
-                            (PSymbol "x"),
-                            (PNumber "10")
+                | Success (PBinaryOperation(
+                             And, 
+                             PBinaryOperation(
+                               Gt,
+                               (PSymbol "x"),
+                               (PNumber "1")),
+                             PBinaryOperation(
+                               Lt,
+                               (PSymbol "x"),
+                               (PNumber "10")
                          )), _) -> true
                 | _    -> false) "Identified AST for && of comparison expressions"
      
@@ -410,7 +430,8 @@ let tests  = [
     ("Parse nested ifs with else", testTwoNestedIfsWithElse) ;
     ("test nested ifs nightmare scenario", testNestedIfsWithElseScenario);
     ("test nested ifs nightmare scenario with empty lines", testNestedIfsWithElseScenarioWithMixeEmptyLines) ;
-    ("test while with call", testWhileWithCall)
+    ("test while with call", testWhileWithCall);
+    ("test if with syntax error", testTwoNestedBlocksWithSyntaxError)
     
     ]
 

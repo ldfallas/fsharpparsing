@@ -1,4 +1,5 @@
 
+
 namespace Experiment
 
 type Operator =
@@ -35,51 +36,80 @@ type PStat =
 
 
 module Expressions =
-        
 
-   type ReaderState = { Data : string;
-                        Position: int;
-                        Indentation: int list}
 
-   let concatParsers (parser1 : (ReaderState ->  (('a * ReaderState) option )))
-                     (parser2 : (ReaderState ->  (('b * ReaderState) option ))) =
+
+   type ReaderState = { Data:        string;
+                        Position:    int;
+                        Line:        int;
+                        Indentation: int list }
+
+   type ParserFailure =
+       | Fatal of string * int
+       | Fail
+
+   
+   type ParsingResult<'a> =
+       | Success of ('a * ReaderState)
+       | Failure of ParserFailure
+   
+
+   let concatParsers (parser1 : (ReaderState ->  ParsingResult<'a>))
+                     (parser2 : (ReaderState ->  ParsingResult<'b>)) =
        fun input -> match (parser1 input) with
-                    | Some (_, restState) -> parser2 restState
-                    | _ -> None
+                    | Success (_, restState) -> parser2 restState
+                    | Failure(failInfo) -> Failure(failInfo)
 
-   let concatParsers2 (parser1 : (ReaderState ->  (('a * ReaderState) option )))
-                     (parser2N : ('a ->  (ReaderState ->  (('b * ReaderState) option )))) =
+   let concatParsers2 (parser1  : (ReaderState ->  ParsingResult<'a>  ))
+                      (parser2N : ('a ->  (ReaderState ->  ParsingResult<'b>))) =
        fun input -> match (parser1 input) with
-                    | Some (matchedTxt, restState) -> (parser2N matchedTxt) restState
-                    | _ -> None
-
-   let inline (>>) (parser1 : (ReaderState ->  (('a * ReaderState) option )))
-                    (parser2 : (ReaderState ->  (('b * ReaderState) option ))) = concatParsers parser1 parser2
-
-   let inline (>>=) (parser1 : (ReaderState ->  (('a * ReaderState) option )))
-                    (parser2N : ('a ->  (ReaderState ->  (('b * ReaderState) option )))) = concatParsers2 parser1 parser2N
+                    | Success (matchedTxt, restState) -> (parser2N matchedTxt) restState
+                    | Failure(failInfo) -> Failure(failInfo)
                     
-   let disjParser (parser1 : (ReaderState ->  (('a * ReaderState) option )))
-                  (parser2 : (ReaderState ->  (('a * ReaderState) option ))) =
+
+   let inline (>>)  (parser1 : (ReaderState ->  ParsingResult<'a>))
+                    (parser2 : (ReaderState ->  ParsingResult<'b>)) = concatParsers parser1 parser2
+
+   let inline (>>=) (parser1 : (ReaderState ->  ParsingResult<'a>))
+                    (parser2N : ('a ->  (ReaderState ->  ParsingResult<'b>))) = concatParsers2 parser1 parser2N
+
+
+   let inline (+>>)  (parser1 : (ReaderState ->  ParsingResult<'a>))
+                     (parser2 : (ReaderState ->  ParsingResult<'b>)) =
        fun input -> match (parser1 input) with
-                    | result & Some _ -> result
+                    | Success (_, restState) -> parser2 restState
+                    | Failure(f & Fatal(_, _)) -> Failure(f)
+                    | Failure(_) -> Failure(Fatal("Parsing error ", input.Line))
+
+   let inline (+>>=) (parser1 : (ReaderState ->  ParsingResult<'a>))
+                     (parser2N : ('a ->  (ReaderState ->  ParsingResult<'b>))) =
+       fun input -> match (parser1 input) with
+                    | Success (matchedTxt, restState) -> (parser2N matchedTxt) restState
+                    | Failure(f & Fatal(_)) -> Failure(f)
+                    | Failure(_) -> Failure(Fatal("Parse problem ", input.Line))                    
+
+                    
+   let disjParser (parser1 : (ReaderState ->  ParsingResult<'a>))
+                  (parser2 : (ReaderState ->  ParsingResult<'a>)) =
+       fun input -> match (parser1 input) with
+                    | success & Success(_) -> success
+                    | Failure(fatal & Fatal(_, _)) -> Failure(fatal)
                     | _ -> parser2 input
 
-   let preturn aValue (state : ReaderState ) = Some (aValue, state)
+   let preturn aValue (state : ReaderState ) = Success (aValue, state)
 
    let pGetIndentation (state : ReaderState ) =
-       Some (state.Indentation, state)
+       Success (state.Indentation, state)
    let pSetIndentation newIndentationLevel (state : ReaderState ) =
-       Some (newIndentationLevel,
+       Success (newIndentationLevel,
              { state with Indentation = newIndentationLevel :: state.Indentation } )
    let pSetFullIndentation newIndentation (state : ReaderState ) =
-       Some (newIndentation,
+       Success (newIndentation,
              { state with Indentation = newIndentation } )
 
 
    let pfail (state : ReaderState) =
-       //System.Console.Out.WriteLine("Failing at: " + state.Position.ToString()-)
-       None
+       Failure(Fail)
 
 
    let rec readingChar currentIndex (predicate:char -> bool) (data : string) : int =
@@ -87,14 +117,17 @@ module Expressions =
            readingChar (currentIndex + 1) predicate data
        else
            currentIndex
+
+   let countNewLines = Seq.fold (fun subtotal current -> if current = '\n' then subtotal + 1 else 0) 0
            
-   let readZeroOrMoreChars (pred:char -> bool) (state : ReaderState) : (string * ReaderState) option =
-       let
-         secondPosition = readingChar state.Position pred state.Data
-         in
-           Some ( state.Data.Substring(state.Position,
-                                  secondPosition - state.Position),
-                 { state with Position = secondPosition })
+   let readZeroOrMoreChars (pred:char -> bool) (state : ReaderState) : ParsingResult<string> =
+       let secondPosition = readingChar state.Position pred state.Data
+       let stringFragment = state.Data.Substring(state.Position, secondPosition - state.Position)
+       let lines =  countNewLines stringFragment
+       Success ( stringFragment,
+                     { state with Position = secondPosition
+                                  Line = state.Line + lines
+                     })
 
 
 
@@ -104,13 +137,13 @@ module Expressions =
        else
            currentIndex
            
-   let readZeroOrMoreStringChars (pred:char -> char -> bool) (state : ReaderState) : (string * ReaderState) option =
-       let
-         secondPosition = readingStringChar state.Position pred state.Data '\000'
-         in
-           Some ( state.Data.Substring(state.Position,
-                                  secondPosition - state.Position),
-                 { state with Position = secondPosition })
+   let readZeroOrMoreStringChars (pred:char -> char -> bool) (state : ReaderState) : ParsingResult<string>  =
+       let secondPosition = readingStringChar state.Position pred state.Data '\000'
+       let stringFragment = state.Data.Substring(state.Position, secondPosition - state.Position)
+       let lines =  countNewLines stringFragment
+       Success ( stringFragment,
+                 { state with Position = secondPosition;
+                              Line = state.Line + lines})
 
            
 
@@ -121,21 +154,29 @@ module Expressions =
           (fun c -> System.Char.IsWhiteSpace(c) && c <> '\n')
                                   
 
-   let readChar(state : ReaderState) : (string * ReaderState) option =
+   let readChar(state : ReaderState) : ParsingResult<string> =
        if state.Data.Length > state.Position then
-          Some (state.Data.[state.Position].ToString(),
-                { state with Position = state.Position + 1 } )
+          let newLineCount = if state.Data.[state.Position] = '\n' then 1 else 0
+          Success (state.Data.[state.Position].ToString(),
+                   { state with Position = state.Position + 1
+                                Line = (state.Line + newLineCount)} )
        else
-          None
+          Failure(Fail)
 
-   let readWithCondition pred state : (string * ReaderState) option =
-         Option.filter pred (readChar state)
+   let readWithCondition pred state : ParsingResult<string> =
+       match (readChar state) with
+             | result & Success successChar when pred successChar ->  result
+             | _ -> Failure(Fail)
 
-   let readSpecificChar myChar (state : ReaderState) : (string * ReaderState) option =
+
+   let readSpecificChar myChar (state : ReaderState) : ParsingResult<string> =
        readWithCondition (fun (r, state) -> r.[0] = myChar) state
 
-   let readWithConditionOnChar pred state : (string * ReaderState) option =
-         Option.filter (fun (c, _) -> pred c) (readChar state)
+   let readWithConditionOnChar pred  state : ParsingResult<string>  =
+         match (readChar state) with
+             | succ & Success (successChar,_) when pred successChar ->  succ
+             | _ -> Failure(Fail)
+
        
 
    let readLPar =
@@ -154,10 +195,10 @@ module Expressions =
            )
 
 
-   let optionalP (parser : (ReaderState ->  (('a * ReaderState) option ))) (defaultValue:'a) =
+   let optionalP (parser : (ReaderState ->  ParsingResult<'a>)) (defaultValue:'a) =
        fun input -> match (parser input) with
-                    | result & Some _ -> result
-                    | _ -> (Some (defaultValue, input))
+                    | result & Success _ -> result
+                    | _ -> (Success (defaultValue, input))
 
    let digitP = readWithConditionOnChar  (fun c -> System.Char.IsDigit(c, 0))
    let digitsP = (readZeroOrMoreChars (fun c ->  System.Char.IsDigit(c)))
@@ -396,9 +437,9 @@ module Expressions =
 
    let ifParser =
        ifKeyword   >>
-       pExpression >>= (fun expr ->
-       colon       >>
-       pBlock      >>= (fun block ->
+       pExpression +>>= (fun expr ->
+       colon       +>>
+       pBlock      +>>= (fun block ->
        (optionalP pElse []) >>= (fun optElseBlockStats ->
                      preturn (PIf(expr,
                                   block,
@@ -408,9 +449,9 @@ module Expressions =
 
    let whileParser =
         whileKeyword    >>
-        pExpression     >>= (fun condition ->
-        colon           >>
-        pBlock          >>= (fun block ->
+        pExpression     +>>= (fun condition ->
+        colon           +>>
+        pBlock          +>>= (fun block ->
         preturn (PWhile(condition, block))))
         
        
@@ -418,5 +459,5 @@ module Expressions =
 
    pStatements := [pReturn; ifParser; pCallStatement; pAssignStatement; whileParser]
 
-   let parse (input : string) (parser : (ReaderState ->  (('a * ReaderState) option ))) =
-       parser {  Data = input ; Position = 0; Indentation = [0] }
+   let parse (input : string) (parser : (ReaderState ->  ParsingResult<'a>)) =
+       parser {  Data = input ; Position = 0; Indentation = [0] ; Line = 1 }
