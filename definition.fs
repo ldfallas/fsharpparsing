@@ -7,6 +7,7 @@ type Operator =
     | Minus
     | Times
     | Div
+    | Mod
     | And
     | Or
     | Equal
@@ -275,6 +276,7 @@ module Expressions =
    let plusOperator = identifyOperator '+' Plus
    let minusOperator = identifyOperator '-' Minus
    let pTimesOperator = identifyOperator '*' Times
+   let pModOperator = identifyOperator '%' Mod
    let pDivOperator = identifyOperator  '/' Div
    let pGtOperator = identifyOperator  '>' Gt
    let pLtOperator = identifyOperator  '<' Lt
@@ -361,7 +363,7 @@ module Expressions =
    unaryExpressions := [ pNot; pCall; pArrayAccess; pPrimaryExpression]
 
 
-   let pMultiplicativeExpression = pBinaryExpression (disjParser pDivOperator pTimesOperator)  pUnaryExpression
+   let pMultiplicativeExpression = pBinaryExpression (disjParser (disjParser pDivOperator pTimesOperator) pModOperator)  pUnaryExpression
          
    let pAdditiveExpression = pBinaryExpression (disjParser plusOperator minusOperator)  pMultiplicativeExpression
 
