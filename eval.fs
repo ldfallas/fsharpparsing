@@ -308,11 +308,12 @@ type PStat =
             line <- System.Console.ReadLine()
         let code = sb.ToString()
         System.Console.WriteLine("Code to process:" + code)
-        let pResult = parse code pStatement
+        let pResult = parse code programFile
         match pResult with
-            | Success(stat, _) ->
-                print_tree stat 0
-                (evaluate stat initialState)
+            | Success(stats, _) ->
+                //print_tree stat 0
+                for stat in stats do 
+                   (evaluate stat initialState)
             | Failure(Fatal(msg,line)) -> System.Console.WriteLine("Fatal parsing error: " + msg + ":"+ line.ToString())
             | Failure(Fail) -> System.Console.WriteLine("Unexpected error")
             

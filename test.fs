@@ -62,6 +62,20 @@ let testWhileWithCall () =
                 | Success (PWhile (_, [PCallStat(PCall("print",[ _]));  _]) , _) -> true
                 | _             -> false) "Identified result"
 
+let testWhileWithPar () =
+    let testPrj = "while ((x*x + y*y) < 2*2) && (iteration < maxiteration):
+         xt := x * x - y*y + x0
+         y := 2*x*y + y
+         x := xt
+         iteration := iteration + 1"
+
+    let result = parse testPrj pStatement
+    assertTrue  (isSuccess result) "While block with call identified"
+    assertTrue (match result with
+                | Success (PWhile (_, [_;_;_;_]), _ ) -> true
+                | _             -> false) "Identified result"
+
+
 
 let testSimpleBlockWithCall () =
     let testPrj = "if x:
@@ -431,6 +445,7 @@ let tests  = [
     ("test nested ifs nightmare scenario", testNestedIfsWithElseScenario);
     ("test nested ifs nightmare scenario with empty lines", testNestedIfsWithElseScenarioWithMixeEmptyLines) ;
     ("test while with call", testWhileWithCall);
+    ("test while with parenthesis", testWhileWithPar);
     ("test if with syntax error", testTwoNestedBlocksWithSyntaxError)
     
     ]

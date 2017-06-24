@@ -240,6 +240,14 @@ module Expressions =
    let returnKeyword = pkeyword "return"
    let elseKeyword   = pkeyword "else"
 
+   let isKeyword(name) =
+       match name with
+           | "if" -> true
+           | "while" -> true
+           | "else" -> true
+           | "return" -> true
+           | _ -> false
+
    let simpleCharWithoutWhitespace theCharacter =
        concatParsers whitespaceNoNl (readSpecificChar theCharacter)
    
@@ -321,7 +329,7 @@ module Expressions =
        whitespace >>
        pSymbol >>= (fun funcNameRef ->
                    match funcNameRef with
-                   | (PSymbol funcName) ->
+                   | (PSymbol funcName) when not(isKeyword(funcName))->
                         readLPar >>
                         simpleSeq >>= (fun args ->
                         readRPar >> (preturn (PCall(funcName, args))))
@@ -418,6 +426,17 @@ module Expressions =
    let indented = indentation >>= (fun result -> if result = "INDENTED" then preturn result else pfail)
 
    let newlines = oneOrMore newline []
+
+
+   let eof =
+       (zeroOrMore newline []) >>
+       whitespaceNoNl >>
+         (fun (state:ReaderState) ->
+             if state.Data.Length  = state.Position then
+                 Success ("", state)
+             else
+                 Failure(Fatal("Parse problem eof expected  ", state.Line))
+                 )
    
    let pBlock =
        newlines   >>
@@ -428,6 +447,21 @@ module Expressions =
             indented  >>
             pStatement) [])  >>= (fun restStats ->
        dedent      >> preturn (firstStat::restStats)))
+
+
+   let topBlock =
+       (zeroOrMore newline [])   >>
+       pStatement >>= (fun firstStat ->
+       (zeroOrMore
+           (newlines  >>
+            indented  >>
+            pStatement) [])  >>= (fun restStats ->
+       preturn (firstStat::restStats)))
+       
+
+   let programFile =
+       topBlock >>= (fun stats ->
+       eof >> preturn stats)
 
    let pElse =
        newlines >>
